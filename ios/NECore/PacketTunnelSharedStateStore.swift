@@ -42,6 +42,14 @@ final class PacketTunnelSharedStateStore {
   private let snapshotFileName = "shared-state.json"
   private var startOptionsData: Data?
 
+  /// Fallback for sideloaded builds without an App Group: the hosting app
+  /// mirrors the shared state into providerConfiguration.
+  func adoptProviderConfiguration(_ data: Data) {
+    if startOptionsData == nil {
+      startOptionsData = data
+    }
+  }
+
   func adoptStartOptions(_ options: [String: NSObject]?) {
     guard let options else { return }
     if let text = options[sharedStateKey] as? String,

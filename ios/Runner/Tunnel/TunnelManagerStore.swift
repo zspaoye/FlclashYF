@@ -133,6 +133,13 @@ final class TunnelManagerStore {
     else {
       return
     }
+    // Sideload profiles may lack an App Group. Shipping the shared state in
+    // providerConfiguration lets the system hand it to the extension directly.
+    if let data = sharedStateStore.sharedStateData(),
+      let text = String(data: data, encoding: .utf8)
+    {
+      proto.providerConfiguration = ["sharedState": text]
+    }
     if #available(iOS 14.0, *) {
       proto.includeAllNetworks = options.includeAllNetworks
     }
