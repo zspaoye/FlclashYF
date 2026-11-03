@@ -43,6 +43,13 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     sharedStateStore.clearRunTime()
     reloadControlWidget()
     sharedStateStore.adoptStartOptions(options)
+    if let providerProtocol = self.`protocol` as? NETunnelProviderProtocol,
+      let text = providerProtocol.providerConfiguration?["sharedState"]
+        as? String,
+      let data = text.data(using: .utf8)
+    {
+      sharedStateStore.adoptProviderConfiguration(data)
+    }
     let stateResult = sharedStateStore.loadVPNOptionsResult()
     guard let vpnOptions = stateResult.options else {
       logger.error(

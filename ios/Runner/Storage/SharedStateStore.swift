@@ -12,16 +12,18 @@ final class SharedStateStore {
 
   private var lastProfileID: Int?
   private var profileChanged = false
+  /// In-memory copy so the tunnel can start even when the App Group suite is
+  /// unavailable (sideload profiles without application-groups).
+  private var cachedSharedState: Data?
+  private var cachedAttemptID: String?
 
   let appGroupIdentifier = "group.\(Bundle.main.bundleIdentifier!)"
   let eventNotificationName = "\(Bundle.main.bundleIdentifier!).NECore.event"
 
   func saveSharedState(_ data: Data) -> Bool {
-    guard let userDefaults = UserDefaults(suiteName: appGroupIdentifier) else {
-      return false
-    }
+    let userDefaults = UserDefaults(suiteName: appGroupIdentifier)
     if lastProfileID == nil,
-      let existingData = userDefaults.data(forKey: sharedStateKey),
+      let existingData = userDefaults?.data(forKey: sharedStateKey),
       let existing = try? JSONSerialization.jsonObject(with: existingData)
         as? [String: Any]
     {
@@ -34,10 +36,10 @@ final class SharedStateStore {
     {
       let profileID = json["currentProfileId"] as? Int
       profileChanged = previousProfileID != profileID
-      let epoch = userDefaults.integer(forKey: profileEpochKey)
+      let epoch = userDefaults?.integer(forKey: profileEpochKey) ?? 0
       let nextEpoch = lastProfileID != profileID ? epoch &+ 1 : max(epoch, 1)
       lastProfileID = profileID
-      userDefaults.set(nextEpoch, forKey: profileEpochKey)
+      userDefaults?.set(nextEpoch, forKey: profileEpochKey)
       json["profileEpoch"] = nextEpoch
       stateData = (try? JSONSerialization.data(withJSONObject: json)) ?? data
       if let setupParams = json[setupParamsKey],
@@ -45,11 +47,12 @@ final class SharedStateStore {
         JSONSerialization.isValidJSONObject(setupParams),
         let setupData = try? JSONSerialization.data(withJSONObject: setupParams)
       {
-        userDefaults.set(setupData, forKey: setupParamsKey)
+        userDefaults?.set(setupData, forKey: setupParamsKey)
       }
     }
-    userDefaults.set(stateData, forKey: sharedStateKey)
-    userDefaults.synchronize()
+    cachedSharedState = stateData
+    userDefaults?.set(stateData, forKey: sharedStateKey)
+    userDefaults?.synchronize()
     commitSharedStateSnapshot(stateData)
     return true
   }
@@ -136,11 +139,13 @@ final class SharedStateStore {
   }
 
   func sharedStateData() -> Data? {
-    UserDefaults(suiteName: appGroupIdentifier)?.data(forKey: sharedStateKey)
+    cachedSharedState
+      ?? UserDefaults(suiteName: appGroupIdentifier)?.data(forKey: sharedStateKey)
   }
 
   func beginTunnelAttempt() -> String {
     let attemptID = UUID().uuidString.lowercased()
+    cachedAttemptID = attemptID
     UserDefaults(suiteName: appGroupIdentifier)?.set(
       attemptID,
       forKey: tunnelAttemptIDKey
@@ -155,8 +160,9 @@ final class SharedStateStore {
     {
       options[sharedStateKey] = text as NSString
     }
-    if let attemptID = UserDefaults(suiteName: appGroupIdentifier)?
-      .string(forKey: tunnelAttemptIDKey)
+    if let attemptID = cachedAttemptID
+      ?? UserDefaults(suiteName: appGroupIdentifier)?
+        .string(forKey: tunnelAttemptIDKey)
     {
       options[tunnelAttemptIDKey] = attemptID as NSString
     }
